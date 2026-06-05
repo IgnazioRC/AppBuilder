@@ -27,7 +27,7 @@ from pathlib import Path
 
 
 # Cartella canonica dei log di AppBuilder.
-LOG_DIR = Path.home() / "Documents" / "log"
+LOG_DIR = Path.home() / "Documents" / "log" / "AppBuilder"
 
 
 def _log_path(prefix: str, app_name: str | None = None) -> Path:
