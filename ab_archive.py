@@ -182,12 +182,13 @@ def collect_archive_files(cfg: dict, config_path: Path) -> dict:
 
     app_name = cfg.get("app_name", "")
     script_field = cfg.get("script", "")
-    local_modules = find_local_imports(script_path)
 
     script_path = resolve_script_path(script_field, config_path)
     if not script_path.exists():
         result["missing"].append(f"script: {script_field}")
         return result
+
+    local_modules = find_local_imports(script_path)
 
     app_dir = script_path.parent
     result["app_root"] = app_dir
