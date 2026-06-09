@@ -270,7 +270,7 @@ def archive_max_mtime(files: dict) -> float:
     mtime massimo di tutti i file raccolti da collect_archive_files.
     """
     mtimes = []
-    for f in files.get("app_files", []) + files.get("config_files", []):
+    for f in files.get("app_files", []) + files.get("shared_files", []) + files.get("config_files", []):
         try:
             mtimes.append(f.stat().st_mtime)
         except Exception:
