@@ -21,7 +21,7 @@ import datetime
 import json
 from pathlib import Path
 
-from ab_utils import extract_version, max_mtime
+from ab_utils import extract_version, find_local_imports, max_mtime
 
 
 def config_root(config_path: Path) -> Path:
@@ -137,7 +137,7 @@ def check_needs_rebuild(cfg: dict, config_path: Path, install_dir: str) -> tuple
         return False, f"Script non trovato: {script_field}"
 
     # mtime massimo delle sorgenti (script + moduli locali)
-    local_modules = cfg.get("local_modules", [])
+    local_modules = find_local_imports(script_path)
     source_mtime = max_mtime(script_path, local_modules)
 
     # mtime del bundle .app installato su questa macchina
