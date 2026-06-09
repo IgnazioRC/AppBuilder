@@ -347,7 +347,7 @@ class ManualTab(ttk.Frame):
 
             icon = self.icon_path.get().strip()
             hidden_list = [h.strip() for h in self.hidden_imports.get().split(",") if h.strip()]
-            source_mtime = max_mtime(script_path, self.detected_modules)
+            source_mtime = max_mtime(script_path, find_local_imports(script_path))
 
             # Popola i dettagli per il log finale prima del build, cosi' anche
             # se il build fallisce abbiamo gia' qualche info nell'header.
@@ -356,7 +356,6 @@ class ManualTab(ttk.Frame):
                 "icon": icon,
                 "windowed": self.windowed.get(),
                 "hidden_imports": hidden_list,
-                "local_modules": list(self.detected_modules),
             })
 
             target, builder_usato = execute_build(
@@ -388,7 +387,6 @@ class ManualTab(ttk.Frame):
                 icon=icon,
                 windowed=self.windowed.get(),
                 hidden_imports=hidden_list,
-                local_modules=self.detected_modules,
                 install_dir=self.app.install_dir.get(),
                 python_builder=builder_usato,
                 source_mtime=source_mtime,

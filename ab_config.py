@@ -36,7 +36,7 @@ def build_json_path(config_path: Path, app_name: str) -> Path:
 
 def save_build_json(config_path: Path, base_path: Path, script_path: Path,
                     app_name: str, icon: str, windowed: bool,
-                    hidden_imports: list[str], local_modules: list[str],
+                    hidden_imports: list[str],
                     install_dir: str, python_builder: str,
                     source_mtime: float):
     """
@@ -71,7 +71,6 @@ def save_build_json(config_path: Path, base_path: Path, script_path: Path,
         "icon": icon_rel,
         "windowed": windowed,
         "hidden_imports": hidden_imports,
-        "local_modules": local_modules,
         "install_dir": install_dir,
         "python_builder": python_builder,
         "version_detected": version,
@@ -137,8 +136,7 @@ def check_needs_rebuild(cfg: dict, config_path: Path, install_dir: str) -> tuple
         return False, f"Script non trovato: {script_field}"
 
     # mtime massimo delle sorgenti (script + moduli locali)
-    local_modules = find_local_imports(script_path)
-    source_mtime = max_mtime(script_path, local_modules)
+    source_mtime = max_mtime(script_path, find_local_imports(script_path))
 
     # mtime del bundle .app installato su questa macchina
     try:

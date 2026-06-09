@@ -27,8 +27,8 @@ from tkinter import ttk, messagebox
 from pathlib import Path
 
 from ab_utils import (
-    find_local_imports,
     extract_version,
+    find_local_imports,
     max_mtime,
 )
 from ab_config import (
@@ -385,10 +385,7 @@ class BatchTab(ttk.Frame):
                     icon_abs = str(icon_p) if icon_p.exists() else ""
 
             hidden_imports = cfg.get("hidden_imports", [])
-            local_modules = cfg.get("local_modules", [])
-            # Ri-rileva moduli (potrebbero essere cambiati)
-            local_modules_live = find_local_imports(script_path)
-            source_mtime = max_mtime(script_path, local_modules_live)
+            source_mtime = max_mtime(script_path, find_local_imports(script_path))
 
             try:
                 target, builder_usato = execute_build(
@@ -408,7 +405,6 @@ class BatchTab(ttk.Frame):
                 # Aggiorna build.json con i nuovi dati
                 # builder_usato e' il Python effettivamente usato (risolto da execute_build)
                 jp = self._json_paths[i]
-                cfg["local_modules"] = local_modules_live
                 cfg["source_mtime"] = source_mtime
                 cfg["built_at"] = datetime.datetime.now().isoformat(timespec='seconds')
                 cfg["version_detected"] = extract_version(script_path)
