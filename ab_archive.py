@@ -33,7 +33,7 @@ import zipfile
 from pathlib import Path
 
 from irc_paths import SHARED_ROOT
-from ab_utils import extract_app_name
+from ab_utils import extract_app_name, find_local_imports
 from ab_config import (
     config_root,
     load_build_json,
@@ -182,7 +182,7 @@ def collect_archive_files(cfg: dict, config_path: Path) -> dict:
 
     app_name = cfg.get("app_name", "")
     script_field = cfg.get("script", "")
-    local_modules = cfg.get("local_modules", [])
+    local_modules = find_local_imports(script_path)
 
     script_path = resolve_script_path(script_field, config_path)
     if not script_path.exists():
