@@ -247,6 +247,7 @@ def max_mtime(script_path: Path, local_modules: list[str]) -> float:
         mtimes.append(script_path.stat().st_mtime)
     except Exception:
         pass
+    script_dir = script_path.parent
     # Se esiste una cartella-pacchetto con lo stesso nome dello script,
     # scansiona ricorsivamente tutti i .py (es. pc_focus_lab/ per pc_focus_lab.py)
     package_dir = script_dir / script_path.stem
@@ -256,7 +257,6 @@ def max_mtime(script_path: Path, local_modules: list[str]) -> float:
                 mtimes.append(py_file.stat().st_mtime)
             except Exception:
                 pass
-    script_dir = script_path.parent
     for mod in local_modules:
         mod_path = script_dir / f"{mod}.py"
         try:
