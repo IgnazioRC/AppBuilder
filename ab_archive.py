@@ -32,6 +32,7 @@ import shutil
 import zipfile
 from pathlib import Path
 
+from irc_paths import SHARED_ROOT
 from ab_utils import extract_app_name
 from ab_config import (
     config_root,
@@ -172,6 +173,7 @@ def collect_archive_files(cfg: dict, config_path: Path) -> dict:
     result = {
         "app_files": [],
         "app_root": None,
+        "shared_files": [],   # moduli da shared/ -> arcname "shared/<mod>.py"
         "config_files": [],
         "config_root": None,
         "missing": [],
@@ -193,19 +195,20 @@ def collect_archive_files(cfg: dict, config_path: Path) -> dict:
     # 1) Script principale
     result["app_files"].append(script_path)
 
-    # 2) Moduli locali dichiarati in build.json - cerco prima nella cartella app
-    #    (i moduli in shared/ sono comuni e li escludo - non vanno nell'archivio
-    #    della singola app)
+    # 2) Moduli locali dichiarati in build.json - cerco prima nella cartella app.
+    #    Se non trovati in app_dir, li cerca in shared/ e li include nell'archivio
+    #    sotto "shared/<mod>.py"
     for mod in local_modules:
         candidate = app_dir / f"{mod}.py"
         if candidate.exists():
             if candidate not in result["app_files"]:
                 result["app_files"].append(candidate)
         else:
-            # potrebbe essere in shared/ -> non lo includiamo (e' comune)
-            shared_dir = Path.home() / "Library" / "CloudStorage" / "Dropbox" / \
-                         "Documenti_IRC" / "Python" / "shared"
-            if not (shared_dir / f"{mod}.py").exists():
+            shared_candidate = SHARED_ROOT / f"{mod}.py"
+            if shared_candidate.exists():
+                if shared_candidate not in result["shared_files"]:
+                    result["shared_files"].append(shared_candidate)
+            else:
                 result["missing"].append(f"modulo locale: {mod}.py")
 
     # 3) Scansione ricorsiva della cartella app per file rilevanti.
@@ -339,6 +342,92 @@ def check_needs_archive(cfg: dict, config_path: Path) -> tuple[bool, str, dict]:
     return False, f"Allineato (zip: {zip_date})", files_info
 
 
+_DATE_RE = re.compile(r"_(\d{8})\.zip$")
+
+
+def _zip_date(path: Path) -> datetime.date | None:
+    m = _DATE_RE.search(path.name)
+    if not m:
+        return None
+    try:
+        return datetime.date(int(m.group(1)[:4]),
+                             int(m.group(1)[4:6]),
+                             int(m.group(1)[6:8]))
+    except ValueError:
+        return None
+
+
+def prune_backup(app_name: str, config_path: Path, log_fn=None) -> int:
+    """
+    Applica la retention policy agli zip in _Archivio/_Backup/ per un'app.
+
+    Retention:
+      - < 14 giorni:        tieni tutto
+      - 14-90 giorni:       1 per settimana ISO (il più recente)
+      - 90 giorni - 1 anno: 1 per mese (il più recente)
+      - > 1 anno:           1 per anno (il più recente)
+
+    Restituisce il numero di file eliminati.
+    """
+    backup_dir = backup_root(config_path)
+    if not backup_dir.exists():
+        return 0
+
+    today = datetime.date.today()
+
+    # Raccoglie zip dell'app con data parsabile
+    dated: list[tuple[datetime.date, Path]] = []
+    for z in backup_dir.glob("*.zip"):
+        if not (z.stem == app_name or z.stem.startswith(f"{app_name}_")):
+            continue
+        d = _zip_date(z)
+        if d is None:
+            continue
+        dated.append((d, z))
+
+    if not dated:
+        return 0
+
+    # Separa per bucket: keep_all / weekly / monthly / yearly
+    keep_all: list[tuple[datetime.date, Path]] = []
+    weekly: dict[tuple[int, int], list[tuple[datetime.date, Path]]] = {}
+    monthly: dict[tuple[int, int], list[tuple[datetime.date, Path]]] = {}
+    yearly: dict[int, list[tuple[datetime.date, Path]]] = {}
+
+    for d, z in dated:
+        age = (today - d).days
+        if age < 14:
+            keep_all.append((d, z))
+        elif age < 90:
+            key = (d.isocalendar()[0], d.isocalendar()[1])  # (anno ISO, settimana ISO)
+            weekly.setdefault(key, []).append((d, z))
+        elif age < 365:
+            key = (d.year, d.month)
+            monthly.setdefault(key, []).append((d, z))
+        else:
+            yearly.setdefault(d.year, []).append((d, z))
+
+    # Per ogni bucket tieni il più recente, elimina gli altri
+    to_delete: list[Path] = []
+    for bucket in (weekly, monthly, yearly):
+        for entries in bucket.values():
+            entries.sort(key=lambda t: t[0], reverse=True)
+            to_delete.extend(z for _, z in entries[1:])
+
+    deleted = 0
+    for z in to_delete:
+        try:
+            z.unlink()
+            deleted += 1
+            if log_fn:
+                log_fn(f"   [info] retention: rimosso {z.name}\n")
+        except Exception as e:
+            if log_fn:
+                log_fn(f"   [warn] impossibile rimuovere {z.name}: {e}\n")
+
+    return deleted
+
+
 def move_previous_archives_to_backup(
         app_name: str,
         config_path: Path,
@@ -436,6 +525,10 @@ def create_archive_zip(cfg: dict, config_path: Path, log_fn) -> tuple[bool, str]
     if moved:
         log_fn(f"   [info] {moved} zip precedente/i spostato/i in _Backup/\n")
 
+    pruned = prune_backup(app_name, config_path, log_fn=log_fn)
+    if pruned:
+        log_fn(f"   [info] retention policy: {pruned} zip obsoleto/i rimosso/i da _Backup/\n")
+
     app_root = files_info["app_root"]
     config_subdir = files_info["config_root"]
 
@@ -451,6 +544,15 @@ def create_archive_zip(cfg: dict, config_path: Path, log_fn) -> tuple[bool, str]
                     n_files += 1
                 except Exception as e:
                     log_fn(f"   [warn] skip {f.name}: {e}\n")
+
+            # Moduli da shared/ -> sotto "shared/"
+            for f in files_info.get("shared_files", []):
+                try:
+                    arcname = Path("shared") / f.name
+                    zf.write(f, arcname.as_posix())
+                    n_files += 1
+                except Exception as e:
+                    log_fn(f"   [warn] skip shared {f.name}: {e}\n")
 
             # File da _Config/<app>/ -> sotto "_Config/<app>/"
             if config_subdir is not None:
