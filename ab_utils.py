@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from irc_paths import SHARED_ROOT
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +129,11 @@ def run_cmd(cmd, log_fn, cwd=None):
 # Analisi sorgenti
 # ---------------------------------------------------------------------------
 
+def get_shared_dir() -> Path | None:
+    """Cartella shared canonica, definita in irc_paths."""
+    return SHARED_ROOT if SHARED_ROOT.exists() else None
+
+
 def find_local_imports(script_path: Path, visited: set = None,
                        extra_dirs: list = None) -> list[str]:
     """
@@ -149,11 +155,11 @@ def find_local_imports(script_path: Path, visited: set = None,
     script_dir = script_path.parent
 
     # Cartella shared canonica, aggiunta automaticamente alle dir di ricerca
-    shared_dir = Path.home() / "Library" / "CloudStorage" / "Dropbox" / "Documenti_IRC" / "Python" / "shared"
+    shared_dir = get_shared_dir()
     search_dirs = [script_dir]
     if extra_dirs:
         search_dirs += [Path(d) for d in extra_dirs]
-    if shared_dir.exists() and shared_dir not in search_dirs:
+    if shared_dir and shared_dir not in search_dirs:
         search_dirs.append(shared_dir)
 
     try:
@@ -257,10 +263,15 @@ def max_mtime(script_path: Path, local_modules: list[str]) -> float:
                 mtimes.append(py_file.stat().st_mtime)
             except Exception:
                 pass
+    shared_dir = get_shared_dir()
+    search_dirs = [script_dir]
+    if shared_dir:
+        search_dirs.append(shared_dir)
     for mod in local_modules:
-        mod_path = script_dir / f"{mod}.py"
-        try:
-            mtimes.append(mod_path.stat().st_mtime)
-        except Exception:
-            pass
+        for search_dir in search_dirs:
+            mod_path = search_dir / f"{mod}.py"
+            try:
+                mtimes.append(mod_path.stat().st_mtime)
+            except Exception:
+                pass
     return max(mtimes) if mtimes else 0.0
