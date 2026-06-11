@@ -142,6 +142,10 @@ def find_local_imports(script_path: Path, visited: set = None,
     Cerca in script_dir e in extra_dirs (es. shared/).
     Gestisce anche import della forma 'from shared.modulo import ...'
     estraendo il nome del modulo foglia (es. 'path_widgets').
+
+    Restituisce solo i moduli rilevati staticamente via AST. I moduli dichiarati
+    esplicitamente in build.json['local_modules'] vanno aggiunti dai chiamanti
+    (collect_archive_files, execute_build).
     """
     if visited is None:
         visited = set()

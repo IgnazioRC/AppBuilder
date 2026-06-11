@@ -35,7 +35,8 @@ def execute_build(script_path: Path, app_name: str, icon: str,
                   install_dir_str: str, python_builder_str: str,
                   log_fn, base_path: Path,
                   clean_after: bool = False,
-                  safe_install_fn=None) -> Path:
+                  safe_install_fn=None,
+                  extra_modules: list[str] = None) -> Path:
     """
     Esegue il build PyInstaller completo.
     Restituisce il path del bundle .app installato.
@@ -116,8 +117,10 @@ def execute_build(script_path: Path, app_name: str, icon: str,
     shared_dir = Path.home() / "Library" / "CloudStorage" / "Dropbox" / "Documenti_IRC" / "Python" / "shared"
     config_paths_arg = f"--paths {shlex.quote(str(shared_dir))} " if shared_dir.exists() else ""
 
-    # Rileva moduli locali (script_dir + shared/)
+    # Rileva moduli locali (script_dir + shared/) e unisce con quelli dichiarati
     _local_mods = find_local_imports(script_path)
+    if extra_modules:
+        _local_mods = sorted(set(_local_mods) | set(extra_modules))
 
     # Moduli trovati in shared/ devono essere --hidden-import perché spesso
     # vengono importati dentro try/except e PyInstaller li ignora

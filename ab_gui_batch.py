@@ -400,6 +400,7 @@ class BatchTab(ttk.Frame):
                     base_path=script_path.parent,
                     clean_after=True,
                     safe_install_fn=lambda t, n: self.app.safe_install_target(t, n, self.log_write),
+                    extra_modules=cfg.get("local_modules") or [],
                 )
 
                 # Aggiorna build.json con i nuovi dati

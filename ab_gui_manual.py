@@ -347,6 +347,9 @@ class ManualTab(ttk.Frame):
 
             icon = self.icon_path.get().strip()
             hidden_list = [h.strip() for h in self.hidden_imports.get().split(",") if h.strip()]
+            config_path = Path(self.app._config_var.get()).expanduser()
+            _existing_cfg = load_build_json(build_json_path(config_path, app_name)) or {}
+            _extra_modules = _existing_cfg.get("local_modules") or []
             source_mtime = max_mtime(script_path, find_local_imports(script_path))
 
             # Popola i dettagli per il log finale prima del build, cosi' anche
@@ -370,6 +373,7 @@ class ManualTab(ttk.Frame):
                 base_path=base,
                 clean_after=self.clean_after.get(),
                 safe_install_fn=lambda t, n: self.app.safe_install_target(t, n, self.log_write),
+                extra_modules=_extra_modules,
             )
 
             build_details["target"] = str(target)

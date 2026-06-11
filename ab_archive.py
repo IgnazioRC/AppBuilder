@@ -189,6 +189,9 @@ def collect_archive_files(cfg: dict, config_path: Path) -> dict:
         return result
 
     local_modules = find_local_imports(script_path)
+    declared = cfg.get("local_modules") or []
+    if declared:
+        local_modules = sorted(set(local_modules) | set(declared))
 
     app_dir = script_path.parent
     result["app_root"] = app_dir
