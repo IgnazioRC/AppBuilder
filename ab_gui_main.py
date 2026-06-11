@@ -20,7 +20,7 @@ from pathlib import Path
 
 from path_widgets import PathVar, PathEntry
 
-from ab_utils import find_icons_dir, trova_python_builder_affidabile
+from ab_utils import find_icons_dir, trova_python_builder_affidabile, VERSION
 from ab_gui_manual import ManualTab
 from ab_gui_batch import BatchTab
 from ab_gui_archive import ArchiveTab
@@ -29,7 +29,7 @@ from ab_gui_archive import ArchiveTab
 class BuilderUI(tk.Tk):
     def __init__(self, base_path: Path, icon_path: Path, config_path: Path):
         super().__init__()
-        self.title("Python App Builder (PyInstaller) v3.0")
+        self.title(f"Python App Builder (PyInstaller) v{VERSION}")
         self.geometry("980x800")
 
         self.base_path = base_path

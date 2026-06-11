@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 App Builder (PyInstaller) - Tkinter GUI
-Versione: 3.0.1
+Versione: 3.1.0
 
 Lanciatore dell'applicazione. La logica e' suddivisa in 8 moduli ab_*.py:
 
@@ -28,6 +28,8 @@ Storico funzionale (vedi commit precedenti per dettagli):
          e .md, ma anche .command, .sh, .json, .yaml, .toml, .ini, .plist.
          Escluse esplicitamente cache, .venv, build/, dist/, .git/.
          Bottone "Pulisci log" nei tab Batch e Archiviazione.
+- [v3.1.0] Fix: thread safety ArchiveTab, save_build_json merge,
+           local_modules cablato, extract_version regex, filtro copy/bak add-data
 - [v3.0] Refactoring: file unico (~2500 righe) spaccato in 8 moduli ab_*.py
          per migliorare la gestibilita' senza alterare il comportamento.
 
@@ -42,7 +44,7 @@ NOTE:
 - La cartella _Config si trova un livello sopra base_path (es. Python/_Config/)
 """
 
-VERSION = "3.0.1"
+VERSION = "3.1.0"
 
 import argparse
 import sys
@@ -57,8 +59,8 @@ if not getattr(sys, 'frozen', False):
 from ab_gui_main import BuilderUI
 
 
-DEFAULT_BASE = str(Path.home() / "Library" / "CloudStorage" / "Dropbox" / "Documenti_IRC" / "Python" / "stable")
-DEFAULT_ICON_PATH = str(Path.home() / "Library" / "CloudStorage" / "Dropbox" / "Documenti_IRC" / "Python" / "stable" / "Icons")
+DEFAULT_BASE = str(Path.home() / "Library" / "CloudStorage" / "Dropbox" / "Documenti_IRC" / "Python")
+DEFAULT_ICON_PATH = str(Path.home() / "Library" / "CloudStorage" / "Dropbox" / "Documenti_IRC" / "Python" / "Icons")
 DEFAULT_CONFIG_PATH = str(Path.home() / "Library" / "CloudStorage" / "Dropbox" / "Documenti_IRC" / "Python" / "_Config")
 
 
