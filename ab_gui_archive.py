@@ -402,7 +402,7 @@ class ArchiveTab(ttk.Frame):
             for i, cfg in enumerate(cfgs, 1):
                 app_name = cfg.get("app_name", "?")
                 self.log_write(f"\n[{i}/{len(cfgs)}] {app_name}\n")
-                self.arch_status_label.config(text=f"Archivio: {app_name}...")
+                self.app.after(0, lambda n=app_name: self.arch_status_label.config(text=f"Archivio: {n}..."))
 
                 # Pre-raccolta per il log: cosa entrera' nello zip e cosa
                 # verra' filtrato. Non e' una doppia scansione costosa,
@@ -424,16 +424,14 @@ class ArchiveTab(ttk.Frame):
                     self.log_write(f"   ✗ {msg}\n")
                     n_fail += 1
 
-                self.arch_progress.config(value=i)
-                self.app.update_idletasks()
+                self.app.after(0, lambda v=i: self.arch_progress.config(value=v))
 
             self.log_write(f"\n=== Completato: {n_ok} OK, {n_fail} errori ===\n")
 
             # Scrittura log su file. Tutto questo blocco e' protetto da un
-            # try/except diagnostico perche' tocca anche widget Tk (status
-            # label, log_write) da un thread non-UI e qualunque eccezione
-            # silenziosa farebbe morire il thread senza segnali. Se c'e' un
-            # problema, lo vediamo nella GUI E sul terminale di lancio.
+            # try/except diagnostico perche' qualunque eccezione silenziosa
+            # farebbe morire il thread senza segnali. Se c'e' un problema,
+            # lo vediamo nella GUI E sul terminale di lancio.
             try:
                 log_path = write_archive_session_log(
                     log_buffer=self._session_log_buffer,
@@ -452,10 +450,11 @@ class ArchiveTab(ttk.Frame):
                                f"{type(e).__name__}: {e}\n")
                 self.log_write(traceback.format_exc() + "\n")
 
-            self.arch_status_label.config(
-                text=f"Completato: {n_ok} OK, {n_fail} errori")
             self._archive_running = False
-            self._set_buttons_state(True)
+            self.app.after(0, lambda ok=n_ok, fail=n_fail: (
+                self.arch_status_label.config(text=f"Completato: {ok} OK, {fail} errori"),
+                self._set_buttons_state(True),
+            ))
             # Aggiorna la lista per mostrare i nuovi zip
             self.app.after(0, self.verify_all)
 
