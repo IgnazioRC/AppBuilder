@@ -25,6 +25,7 @@ from ab_utils import (
     run_cmd,
     find_local_imports,
 )
+from ab_archive import file_exclude_reason
 
 # log_path arriva dal modulo condiviso 'shared/path_widgets.py'
 from path_widgets import log_path
@@ -151,6 +152,10 @@ def execute_build(script_path: Path, app_name: str, icon: str,
         if sibling.resolve() == script_path.resolve():
             continue
         if sibling.stem in already_known:
+            continue
+        reason = file_exclude_reason(sibling)
+        if reason:
+            log_fn(f"[add-data skipped] {sibling.name} ({reason})\n")
             continue
         # File .py nella stessa cartella non già incluso: aggiungilo come dato
         add_data_arg += f' --add-data {shlex.quote(str(sibling) + ":.")}'
