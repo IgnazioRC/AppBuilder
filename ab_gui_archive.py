@@ -42,7 +42,7 @@ from ab_log import (
     write_archive_session_log,
 )
 from ab_gui_batch import (
-    COLOR_OK, COLOR_REBUILD, COLOR_MISSING, COLOR_ERROR,
+    COLOR_OK, COLOR_REBUILD, COLOR_MISSING, COLOR_ERROR, COLOR_DISABLED,
 )
 
 
@@ -102,6 +102,7 @@ class ArchiveTab(ttk.Frame):
         self.tree.tag_configure("rebuild", foreground=COLOR_REBUILD)
         self.tree.tag_configure("missing", foreground=COLOR_MISSING)
         self.tree.tag_configure("error", foreground=COLOR_ERROR)
+        self.tree.tag_configure("disabled", foreground=COLOR_DISABLED)
 
         # Bottoni — disposizione per fase del workflow:
         #
@@ -270,13 +271,18 @@ class ArchiveTab(ttk.Frame):
         for cfg in self._configs:
             app_name = cfg.get("app_name", "?")
             version = cfg.get("version_detected") or "—"
+            enabled = cfg.get("enabled", True)
             latest = find_latest_archive(config_path, app_name)
             if latest:
                 zip_info = f"{latest.name}"
             else:
                 zip_info = "—"
-            self.tree.insert("", "end",
-                             values=(app_name, version, zip_info, "(non verificato)"))
+            status = "(disabilitata)" if not enabled else "(non verificato)"
+            tag = "disabled" if not enabled else ""
+            iid = self.tree.insert("", "end",
+                             values=(app_name, version, zip_info, status))
+            if tag:
+                self.tree.item(iid, tags=(tag,))
 
     def verify_all(self):
         """Verifica lo stato di archiviazione di tutte le app."""
@@ -288,34 +294,44 @@ class ArchiveTab(ttk.Frame):
         n_obsolete = 0
         n_ok = 0
         n_error = 0
+        n_disabled = 0
 
         for cfg in self._configs:
             app_name = cfg.get("app_name", "?")
             version = cfg.get("version_detected") or "—"
-
-            needs, reason, _ = check_needs_archive(cfg, config_path)
+            enabled = cfg.get("enabled", True)
             latest = find_latest_archive(config_path, app_name)
             zip_info = latest.name if latest else "—"
 
-            if "mancanti" in reason.lower():
-                tag = "error"
-                n_error += 1
-            elif needs:
-                tag = "rebuild"
-                n_obsolete += 1
+            if not enabled:
+                tag = "disabled"
+                reason = "(disabilitata)"
+                n_disabled += 1
             else:
-                tag = "ok"
-                n_ok += 1
+                needs, reason, _ = check_needs_archive(cfg, config_path)
+                if "mancanti" in reason.lower():
+                    tag = "error"
+                    n_error += 1
+                elif needs:
+                    tag = "rebuild"
+                    n_obsolete += 1
+                else:
+                    tag = "ok"
+                    n_ok += 1
 
             self.tree.insert("", "end",
                              values=(app_name, version, zip_info, reason),
                              tags=(tag,))
 
         msg = (f"[i] Verifica completata: {n_ok} allineate, "
-               f"{n_obsolete} obsolete, {n_error} con errori\n")
+               f"{n_obsolete} obsolete, {n_error} con errori"
+               + (f", {n_disabled} disabilitate" if n_disabled else "")
+               + "\n")
         self.log_write(msg)
-        self.arch_status_label.config(
-            text=f"Allineate: {n_ok}  Obsolete: {n_obsolete}  Errori: {n_error}")
+        status = f"Allineate: {n_ok}  Obsolete: {n_obsolete}  Errori: {n_error}"
+        if n_disabled:
+            status += f"  Disabilitate: {n_disabled}"
+        self.arch_status_label.config(text=status)
 
     # -----------------------------------------------------------------------
     # Archiviazione
@@ -339,10 +355,12 @@ class ArchiveTab(ttk.Frame):
         return result
 
     def _obsolete_configs(self) -> list[dict]:
-        """Restituisce le cfg che necessitano archiviazione."""
+        """Restituisce le cfg abilitate che necessitano archiviazione."""
         config_path = self._config_path()
         result = []
         for cfg in self._configs:
+            if not cfg.get("enabled", True):
+                continue  # rispetta enabled: false, come fa il tab Batch
             needs, _, info = check_needs_archive(cfg, config_path)
             if needs and not info.get("missing"):
                 result.append(cfg)
@@ -365,14 +383,22 @@ class ArchiveTab(ttk.Frame):
         self._run_archive_batch(cfgs, "selezionate")
 
     def archive_all(self):
-        if not self._configs:
+        if not self._configs:\
             messagebox.showinfo("Archiviazione", "Nessuna app caricata.")
             return
-        if not messagebox.askyesno(
-                "Archivia tutte",
-                f"Confermi l'archiviazione di TUTTE le {len(self._configs)} app?"):
+        # Filtra le app abilitate — stesso criterio del tab Batch
+        cfgs = [c for c in self._configs if c.get("enabled", True)]
+        if not cfgs:
+            messagebox.showinfo("Archiviazione",
+                                "Nessuna app abilitata (tutte con enabled: false).")
             return
-        self._run_archive_batch(self._configs, "tutte")
+        n_disabled = len(self._configs) - len(cfgs)
+        msg = f"Confermi l'archiviazione di TUTTE le {len(cfgs)} app abilitate?"
+        if n_disabled:
+            msg += f"\n\n({n_disabled} app disabilitate verranno saltate)"
+        if not messagebox.askyesno("Archivia tutte", msg):
+            return
+        self._run_archive_batch(cfgs, "tutte")
 
     def _run_archive_batch(self, cfgs: list[dict], label: str):
         """Esegue l'archiviazione in un thread separato."""

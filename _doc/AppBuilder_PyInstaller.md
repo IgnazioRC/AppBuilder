@@ -16,9 +16,9 @@ Python App Builder con PyInstaller
 options:
   -h, --help                    show this help message and exit
   --base_path BASE_PATH         Cartella contenente gli script .py
-                                (default: ~/Dropbox/.../Python/stable)
+                                (default: ~/Dropbox/.../Python)
   --icon_path ICON_PATH         Cartella di default per le icone .icns
-                                (default: ~/Dropbox/.../Python/stable/Icons)
+                                (default: ~/Dropbox/.../Python/Icons)
   --config_path CONFIG_PATH     Cartella _Config dove salvare i build.json
                                 (default: ~/Dropbox/.../Python/_Config)
 ```
@@ -365,7 +365,7 @@ forza l'mtime a "adesso", rendendo il file più recente del bundle e quindi visi
 ## Bootstrap (prima installazione di AppBuilder stesso)
 
 ```bash
-cd ~/Dropbox/.../Python/stable/AppBuilder_3.0
+cd ~/Dropbox/.../Python/AppBuilder_3.0
 python3 AppBuilder_PyInstaller.py
 ```
 
