@@ -204,25 +204,24 @@ def find_local_imports(script_path: Path, visited: set = None,
 
 def extract_version(script_path: Path) -> str | None:
     """
-    Cerca un numero di versione nello script.
-    Riconosce pattern comuni come:
-      __version__ = "1.4"
-      # Versione: 1.4
-      VERSION = "2.0"
+    Cerca un numero di versione nello script. Riconosce (in ordine):
+      __version__ = "1.4.0"
+      APP_VERSION = "1.4.0"  oppure  VERSION = "1.4.0"  (non DB_VERSION ecc.)
+      VERSIONE_SCRIPT = "1.4.0"
+      # Versione: 1.4  oppure  # versione 1.4
     """
     try:
         source = script_path.read_text(encoding='utf-8', errors='ignore')
         patterns = [
-            r'__version__\s*=\s*["\']([^"\']+)["\']',
-            r'(?:APP_|VERSIONE_SCRIPT\s*=\s*["\']([^"\']+)["\']|)VERSION\s*=\s*["\']([^"\']+)["\']',
-            r'#\s*[Vv]ersione?:?\s*([\d]+\.[\d]+(?:\.[\d]+)?)',
-            r'Versione:\s*([\d]+\.[\d]+(?:\.[\d]+)?)',
+            r'(?m)^__version__\s*=\s*["\']([^"\']+)["\']',
+            r'(?m)^(?:APP_)?VERSION\s*=\s*["\']([^"\']+)["\']',
+            r'(?m)^VERSIONE_SCRIPT\s*=\s*["\']([^"\']+)["\']',
+            r'(?m)^#\s*[Vv]ersione?:?\s*([\d]+\.[\d]+(?:\.[\d]+)?)',
         ]
         for pat in patterns:
             m = re.search(pat, source)
             if m:
-                # Supporta pattern con gruppi multipli (es. APP_VERSION / VERSION)
-                val = next((g for g in m.groups() if g), None)
+                val = m.group(1)
                 if val:
                     return val.strip()
     except Exception:
