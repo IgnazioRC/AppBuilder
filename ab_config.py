@@ -40,12 +40,17 @@ def save_build_json(config_path: Path, base_path: Path, script_path: Path,
                     install_dir: str, python_builder: str,
                     source_mtime: float):
     """
-    Salva (o aggiorna) il file build.json in _Config/<app_name>/build.json.
+    Aggiorna build.json in _Config/<app_name>/build.json con merge:
+    carica l'esistente, sovrascrive i campi noti, preserva i campi
+    sconosciuti (es. local_modules). Il campo "enabled" non viene mai
+    resettato se già presente nel file esistente.
     Restituisce il path del file salvato.
     """
     cfg_dir = config_root(config_path) / app_name
     cfg_dir.mkdir(parents=True, exist_ok=True)
     json_path = cfg_dir / "build.json"
+
+    existing = load_build_json(json_path) or {}
 
     # Percorso script relativo a config_path.parent (es. Python/)
     # cosi' e' stabile indipendentemente da dove punta base_path
@@ -79,7 +84,11 @@ def save_build_json(config_path: Path, base_path: Path, script_path: Path,
         "enabled": True,
     }
 
-    json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
+    merged = {**existing, **data}
+    if "enabled" in existing:
+        merged["enabled"] = existing["enabled"]
+
+    json_path.write_text(json.dumps(merged, indent=2, ensure_ascii=False), encoding='utf-8')
     return json_path
 
 
