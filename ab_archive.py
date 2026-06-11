@@ -27,6 +27,7 @@ Logging su file (LOG_DIR, write_*_log) e' nel modulo ab_log.
 
 import datetime
 import difflib
+import os
 import re
 import shutil
 import zipfile
@@ -576,30 +577,27 @@ def create_archive_zip(cfg: dict, config_path: Path, log_fn) -> tuple[bool, str]
 
 def diagnose_config_misalignments(base_path: Path, config_path: Path) -> dict:
     """
-    Diagnostica disallineamenti tra cartelle app (in base_path) e cartelle
-    di configurazione (in _Config/).
+    Diagnostica disallineamenti tra cartelle app e cartelle di configurazione
+    in _Config/. Funziona con layout piatti e nidificati (es. Python/_finance/App/).
 
-    Logica di riconoscimento: una cartella app si considera collegata a una
-    cartella _Config quando vale ALMENO UNA di queste condizioni:
-      (a) Nome diretto: cartella stable e _Config hanno lo stesso nome.
-      (b) APP_NAME nel sorgente: lo script contiene APP_NAME = "X" e esiste
-          _Config/X/.
-      (c) build.json.script: una _Config/<X>/build.json ha un campo "script"
-          che punta a un file dentro questa cartella app.
-    Esempio (c): stable/Analisi portafoglio/AggiornaPortafoglio.py compare
-    in _Config/AggiornaPortafoglio/build.json["script"], quindi le due
-    cartelle sono legittimamente collegate anche se i nomi differiscono.
+    Fase 1: app scoperte dai build.json in _Config (layout-agnostic, fonte di
+    verita'). Per ogni _Config/<X>/build.json["script"] risolve il path e
+    registra il collegamento cfg -> app_dir.
+
+    Fase 2: scansione ricorsiva di base_path come fallback per app senza
+    build.json. Cerca cartelle foglia con almeno un .py, escludendo cartelle
+    in ARCHIVE_EXCLUDED_DIRS e cartelle nascoste.
+
+    Fase 3: _Config non coperte da Fase 1+2 sono orfane.
+
+    Fase 4: build.json con app_name diverso dal nome cartella _Config (bug duro).
 
     Restituisce un dict con:
       - "missing_config": [(app_dir_name, suggested_config_match_or_None), ...]
-          cartelle app sorgente che non risultano collegate ad alcuna _Config
-      - "orphan_config": [(config_dir_name, suggested_app_match_or_None), ...]
-          cartelle _Config/<X>/ a cui nessuna app fa riferimento (residui)
+      - "orphan_config":  [(config_dir_name, suggested_app_match_or_None), ...]
       - "app_name_mismatch": [(config_dir_name, app_name_in_json), ...]
-          _Config/<X>/build.json con app_name diverso da <X> (vero bug)
       - "matched": [(app_dir_name, config_dir_name, link_method), ...]
-          collegamenti riconosciuti; link_method e' uno di:
-            "nome_diretto", 'APP_NAME="..."', "build.json.script"
+          link_method: "build.json.script", "nome_diretto", 'APP_NAME="..."'
     """
     result = {
         "missing_config": [],
@@ -611,17 +609,6 @@ def diagnose_config_misalignments(base_path: Path, config_path: Path) -> dict:
     if not base_path.exists() or not config_path.exists():
         return result
 
-    # Cartelle app candidate (in base_path), escludendo cartelle che iniziano
-    # con _ (convenzione IRC: fuori produzione) o con punto (hidden)
-    app_dirs = sorted([
-        d for d in base_path.iterdir()
-        if d.is_dir()
-        and not d.name.startswith(".")
-        and not d.name.startswith("_")
-        and any(d.glob("*.py"))  # deve contenere almeno un .py a livello radice
-    ])
-    app_dir_names = [d.name for d in app_dirs]
-
     # Cartelle config esistenti (escludendo Logs e nascoste)
     config_dirs = sorted([
         d.name for d in config_path.iterdir()
@@ -629,34 +616,15 @@ def diagnose_config_misalignments(base_path: Path, config_path: Path) -> dict:
     ])
     config_dirs_set = set(config_dirs)
 
-    # Per ogni cartella app, costruisce la lista degli APP_NAME dichiarati
-    # nei suoi script .py (radice della cartella) e nel build.json se presente
-    # nella _Config con lo stesso nome.
-    # app_to_appnames: { "Caricamento Temperature": {"CaricaTemperature"} }
-    app_to_appnames: dict[str, set[str]] = {}
-    for app_dir in app_dirs:
-        names = set()
-        # 1) Estrai APP_NAME dagli script .py della cartella radice
-        for py in app_dir.glob("*.py"):
-            extracted = extract_app_name(py)
-            if extracted:
-                names.add(extracted)
-        # 2) Se esiste _Config/<stesso nome>/build.json, usa anche quello
-        same_named_cfg = config_path / app_dir.name / "build.json"
-        if same_named_cfg.exists():
-            data = load_build_json(same_named_cfg)
-            if data and data.get("app_name"):
-                names.add(data["app_name"])
-        # 3) Il nome cartella stesso e' sempre un candidato implicito
-        names.add(app_dir.name)
-        app_to_appnames[app_dir.name] = names
+    matched_configs: set[str] = set()
+    # app_dir.resolve() -> cfg_dir  (per skip rapido in Fase 2)
+    known_app_dirs: dict[Path, str] = {}
+    # tutti i nomi cartella app scoperti (per difflib nelle orfane)
+    all_app_dir_names: list[str] = []
 
-    # Costruisce il legame INVERSO: per ogni _Config/<X>/, qual e' la cartella
-    # sorgente dichiarata nel suo build.json["script"]?
-    # Questa e' la fonte di verita' piu' robusta perche' il build.json e'
-    # stato salvato proprio per quella build, con il path corretto.
-    # cfg_to_app_dir: { "AggiornaPortafoglio": "Analisi portafoglio" }
-    cfg_to_app_dir: dict[str, str] = {}
+    # ------------------------------------------------------------------
+    # FASE 1: app scoperte dai build.json — layout-agnostic
+    # ------------------------------------------------------------------
     for cfg_dir in config_dirs:
         json_path = config_path / cfg_dir / "build.json"
         if not json_path.exists():
@@ -667,83 +635,93 @@ def diagnose_config_misalignments(base_path: Path, config_path: Path) -> dict:
         script_field = data.get("script", "")
         if not script_field:
             continue
-        # Risolve in path assoluto e estrae la cartella app
         try:
             script_abs = resolve_script_path(script_field, config_path)
-            # La cartella app e' parent di script_abs, relativa a base_path
-            try:
-                rel = script_abs.relative_to(base_path)
-                app_dir_from_json = rel.parts[0] if rel.parts else None
-                if app_dir_from_json:
-                    cfg_to_app_dir[cfg_dir] = app_dir_from_json
-            except ValueError:
-                # script fuori da base_path
-                pass
+            app_dir = script_abs.parent
+            app_dir_key = app_dir.resolve()
+            if cfg_dir not in matched_configs:
+                matched_configs.add(cfg_dir)
+                known_app_dirs[app_dir_key] = cfg_dir
+                all_app_dir_names.append(app_dir.name)
+                result["matched"].append((app_dir.name, cfg_dir, "build.json.script"))
         except Exception:
             pass
 
-    # Risolve i collegamenti app -> _Config
-    # Una cartella app si dichiara "collegata" se:
-    #   a) il suo nome coincide con una _Config esistente, oppure
-    #   b) ALMENO UNO dei suoi candidati APP_NAME corrisponde a una _Config, oppure
-    #   c) ESISTE una _Config il cui build.json["script"] punta dentro questa cartella
-    matched_configs = set()  # config_dirs che risultano collegate
+    # ------------------------------------------------------------------
+    # FASE 2: scansione ricorsiva di base_path — fallback per app senza
+    # build.json o la cui _Config non è ancora stata creata
+    # ------------------------------------------------------------------
+    excluded_lower = {d.lower() for d in ARCHIVE_EXCLUDED_DIRS}
 
-    # Indice inverso per ricerca veloce: app_dir -> cfg_dir (da build.json)
-    app_dir_to_cfg_via_json: dict[str, str] = {}
-    for cfg_dir, app_dir_name in cfg_to_app_dir.items():
-        # Preferisci il primo legame trovato (gli ulteriori vengono ignorati)
-        if app_dir_name not in app_dir_to_cfg_via_json:
-            app_dir_to_cfg_via_json[app_dir_name] = cfg_dir
+    def _is_excluded(d: Path) -> bool:
+        return d.name.startswith(".") or d.name.lower() in excluded_lower
 
-    for app_dir_name, candidates in app_to_appnames.items():
+    for root, dirs, _ in os.walk(base_path):
+        root_path = Path(root)
+        # Pota le sottocartelle escluse in-place per non scenderci dentro
+        dirs[:] = [d for d in dirs if not _is_excluded(root_path / d)]
+        # Controlla se questa cartella è una "foglia con .py"
+        if not any(root_path.glob("*.py")):
+            continue
+        app_dir_key = root_path.resolve()
+        if app_dir_key in known_app_dirs:
+            continue  # già coperta in Fase 1
+
+        app_dir_name = root_path.name
+        all_app_dir_names.append(app_dir_name)
+
+        # Cerca candidati APP_NAME negli script .py
+        candidates: set[str] = {app_dir_name}
+        for py in root_path.glob("*.py"):
+            extracted = extract_app_name(py)
+            if extracted:
+                candidates.add(extracted)
+        # Se esiste _Config/<stesso nome>/build.json usa anche app_name da lì
+        same_named_cfg = config_path / app_dir_name / "build.json"
+        if same_named_cfg.exists():
+            d = load_build_json(same_named_cfg)
+            if d and d.get("app_name"):
+                candidates.add(d["app_name"])
+
         matched_config = None
         link_method = None
-        # a) match diretto per nome
+        # a) nome diretto
         if app_dir_name in config_dirs_set:
             matched_config = app_dir_name
             link_method = "nome_diretto"
-        # b) match via APP_NAME nel sorgente
+        # b) APP_NAME nel sorgente
         if not matched_config:
             for cand in candidates:
                 if cand != app_dir_name and cand in config_dirs_set:
                     matched_config = cand
                     link_method = f'APP_NAME="{cand}"'
                     break
-        # c) match via build.json.script che punta a questa cartella
-        if not matched_config and app_dir_name in app_dir_to_cfg_via_json:
-            matched_config = app_dir_to_cfg_via_json[app_dir_name]
-            link_method = "build.json.script"
-
+        # c) fuzzy fallback
         if matched_config:
             matched_configs.add(matched_config)
+            known_app_dirs[app_dir_key] = matched_config
             result["matched"].append((app_dir_name, matched_config, link_method))
         else:
-            # Nessun collegamento trovato: suggerisce match piu' probabile
-            matches = difflib.get_close_matches(app_dir_name, config_dirs,
-                                                n=1, cutoff=0.5)
-            suggested = matches[0] if matches else None
-            if not suggested:
-                for cand in candidates:
-                    fm = difflib.get_close_matches(cand, config_dirs,
-                                                   n=1, cutoff=0.5)
-                    if fm:
-                        suggested = fm[0]
-                        break
+            suggested = None
+            for name in [app_dir_name] + list(candidates):
+                fm = difflib.get_close_matches(name, config_dirs, n=1, cutoff=0.5)
+                if fm:
+                    suggested = fm[0]
+                    break
             result["missing_config"].append((app_dir_name, suggested))
 
-    # Cartelle _Config orfane = non collegate a nessuna app
+    # ------------------------------------------------------------------
+    # FASE 3: _Config orfane
+    # ------------------------------------------------------------------
     for cfg_dir in config_dirs:
         if cfg_dir not in matched_configs:
-            # Suggerisce app simile per nome
-            matches = difflib.get_close_matches(cfg_dir, app_dir_names,
+            matches = difflib.get_close_matches(cfg_dir, all_app_dir_names,
                                                 n=1, cutoff=0.5)
-            suggested = matches[0] if matches else None
-            result["orphan_config"].append((cfg_dir, suggested))
+            result["orphan_config"].append((cfg_dir, matches[0] if matches else None))
 
-    # build.json con app_name diverso dal nome cartella _Config parent.
-    # Questo resta un disallineamento "duro" — il nome cartella _Config
-    # DEVE essere uguale all'app_name del JSON (lo usa il rebuild).
+    # ------------------------------------------------------------------
+    # FASE 4: app_name_mismatch (bug duro — nome cartella != app_name JSON)
+    # ------------------------------------------------------------------
     for cfg_dir in config_dirs:
         json_path = config_path / cfg_dir / "build.json"
         if json_path.exists():
