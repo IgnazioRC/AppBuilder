@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 from irc_paths import SHARED_ROOT
 
-VERSION = "3.1.0"
+VERSION = "3.1.2"
 
 # ---------------------------------------------------------------------------
 # Python builder

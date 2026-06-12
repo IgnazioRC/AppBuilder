@@ -2,7 +2,7 @@
 
 ## Descrizione Breve
 
-App Builder (PyInstaller) - Tkinter GUI - Versione: 3.1.0 - CLD
+App Builder (PyInstaller) - Tkinter GUI - Versione: 3.1.2 - CLD
 
 ## Uso e Parametri
 
@@ -26,7 +26,7 @@ options:
 ## Descrizione Completa
 
 App Builder (PyInstaller) - Tkinter GUI
-Versione: 3.1.0
+Versione: 3.1.2
 
 Funzionalità:
 - Seleziona uno script .py (da base_path)
@@ -433,6 +433,9 @@ Fino a v3.0, esisteva un applicativo separato `ArchiviaProgetto.py` (v1.3.0, mag
 
 ## Storico modifiche
 
+- **v3.1.2 (12/06/2026)** — Fix portabilità e robustezza archiviazione:
+  - `ab_build`: `python_builder` ora salvato come path home-relative nel build.json (es. `Python_venv/stable/bin/python3`). Portabile tra Mac con username diversi. In lettura il path relativo viene espanso con `Path.home()`, con fallback al path assoluto.
+  - `ab_archive`: `_Config/<app>/` mancante non blocca più l'archiviazione — emette `[WARN]` nel log e procede. `check_needs_archive` restituisce `True` (invece di errore) quando la _Config è assente, così lo snapshot viene rifatto appena la config è disponibile.
 - **v3.1.0 (26/05/2026)** — Diverse novità nel tab Archiviazione e nel sistema di logging:
   - Tab Archiviazione: riorganizzazione bottoni in due righe per workflow (esplorazione vs esecuzione)
   - Nuovo bottone **🔬 Dry-run** — simulazione archiviazione senza creare nulla, con sezioni "Cartella app" e "Configurazione" + Inclusi/Esclusi (e motivo per gli esclusi)
