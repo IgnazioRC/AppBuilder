@@ -263,8 +263,7 @@ def collect_archive_files(cfg: dict, config_path: Path) -> dict:
         for f in sorted(cfg_dir.rglob("*")):
             if f.is_file() and not f.name.startswith("."):
                 result["config_files"].append(f)
-    else:
-        result["missing"].append(f"_Config/{app_name}/ (cartella mancante)")
+    # _Config mancante non è bloccante — il warning viene emesso da create_archive_zip
 
     return result
 
@@ -513,6 +512,10 @@ def create_archive_zip(cfg: dict, config_path: Path, log_fn) -> tuple[bool, str]
     files_info = collect_archive_files(cfg, config_path)
     if files_info.get("missing"):
         return False, f"File mancanti: {', '.join(files_info['missing'])}"
+
+    if files_info["config_root"] is None:
+        log_fn(f"   [WARN] _Config/{app_name}/ mancante — "
+               f"build.json escluso dallo snapshot!\n")
 
     arch_dir = archive_root(config_path)
     arch_dir.mkdir(parents=True, exist_ok=True)

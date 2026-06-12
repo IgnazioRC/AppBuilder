@@ -50,7 +50,9 @@ def execute_build(script_path: Path, app_name: str, icon: str,
     def _valida_builder(py_str: str) -> Path | None:
         if not py_str or not py_str.strip():
             return None
-        p = Path(py_str).expanduser()
+        p = Path(py_str)
+        if not p.is_absolute():
+            p = Path.home() / p
         if not p.exists() or not os.access(str(p), os.X_OK):
             return None
         try:
@@ -230,7 +232,11 @@ def execute_build(script_path: Path, app_name: str, icon: str,
     log_fn(f"App installata in: {target}\n")
     log_fn("=" * 60 + "\n")
 
-    return target, str(builder_py)
+    try:
+        builder_rel = str(builder_py.relative_to(Path.home()))
+    except ValueError:
+        builder_rel = str(builder_py)
+    return target, builder_rel
 
 
 def _convert_png_to_icns(png_path: Path, out_icns: Path, log_fn):
