@@ -87,6 +87,11 @@ def save_build_json(config_path: Path, base_path: Path, script_path: Path,
     merged = {**existing, **data}
     if "enabled" in existing:
         merged["enabled"] = existing["enabled"]
+    # Preserva hidden_imports e local_modules esistenti se il parametro è vuoto
+    if not hidden_imports and existing.get("hidden_imports"):
+        merged["hidden_imports"] = existing["hidden_imports"]
+    if not data.get("local_modules") and existing.get("local_modules"):
+        merged["local_modules"] = existing["local_modules"]
 
     json_path.write_text(json.dumps(merged, indent=2, ensure_ascii=False), encoding='utf-8')
     return json_path
