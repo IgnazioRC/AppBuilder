@@ -383,7 +383,7 @@ class ArchiveTab(ttk.Frame):
         self._run_archive_batch(cfgs, "selezionate")
 
     def archive_all(self):
-        if not self._configs:\
+        if not self._configs:
             messagebox.showinfo("Archiviazione", "Nessuna app caricata.")
             return
         # Filtra le app abilitate — stesso criterio del tab Batch
